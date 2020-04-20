@@ -1,0 +1,156 @@
+Dan Upper's procedure for temporally downscaling monthly averages to
+daily averages.
+
+
+==Problem==
+
+We are given monthly averages of some weather parameter -- I may call it
+temperature, but it that shouldn't matter much -- create daily
+averages of that parameter.
+
+In particular, I'm assuming that the value we have for February is the
+average of the daily normals for each day in February.  I expect the
+output to be smooth, and I expect its average values for each month to
+be the inputs.
+
+NOTE: what follows assumes that the value we have is an average over
+the days of the month.  While this works for temperature, it may not
+be what you actually have for precipitation.  Monthly average
+precipitation is likely to be the total precipitation in that month,
+larger than the daily average by a factor of about 30.
+
+
+==Theory==
+
+(All of the theory here treats the input averages as single values.
+But all we end up doing with them is addition, subtraction, and scalar
+multiplication -- all operations that work just fine on raster layers.)
+
+Suppose we assign to each day it's month's average.  This won't be
+smooth; it will be discontinuous at the end of each month.  If we
+smooth it, we have no reason to expect the averages to still be
+correct -- in fact, for the warmest and coldest months, they will show
+systematic bias.
+
+Suppose we then calculate the error in the averages of the smoothed
+values, and add that error back to each value in the month, so that
+the averages once more agree with the inputs.  This will re-introduce
+the discontinuity at the end of each month, but the new discontinuity
+will be smaller than the original.  We can iterate this process,
+alternately smoothing and restoring the averages, and see if it
+converges.
+
+(I'm going to do this for the leap-year case first, for no particular
+reason.)
+
+Let U be a (column) vector of parameter values.  For each day, assign the
+value for that day's month, so the vector has 366 entries, but only 12
+unique values.
+
+Let M be a block-diagonal matrix with a block for each month.  The
+non-zero values should be 1/(number of days in month), so that each
+row and each column sum to 1.  Then if V is a column vector with a
+value for each day, replacing V with M*V replaces each value with the
+monthly average.
+
+Let S be a 366x366 matrix which does some smoothing.  S is your
+choice, but its rows and columns of S must sum to 1.  My primary
+example is almost tri-diagonal -- 0.5 on the main diagonal, 0.25 on
+the diagonals above and below AND in the top right and lower left
+corners.  S*V should be a somewhat smoothed version of V.  It doesn't
+have to smooth by very much, because we will apply it repeatedly.  In
+fact, this process will converge to the same result for S and for S*S.
+
+Let t_k be a column vector, with one entry for each day, which is the kth
+approximation to our desired normals.  t_0 = U.
+
+Given t_k, we
+smooth it:                            S*t_k
+calculate the averages:               M*S*t_k
+find the errors in those averages:    U - M*S*t_k
+add the errors to the smoothed
+version to get t_k+1             t_k+1 = S*t_k + U - M*S*t_k
+
+Simplifying, we get this, where I is the identity matrix:
+
+   t_k+1 = U + (I-M)*S*t_k.
+
+If this converges, then t_k = t_k+1.  Let's call the limit t, with no
+subscript. 
+
+   t = U + (I-M)*S*t
+   I*t = U + (I-M)*S*t
+   (I - (I - M)*S)*t = U
+
+Let A = I - (I-M)*S.  Then we have A*t=U.  If A is invertible, we get
+our answer in a single step:
+
+   t = inv(A)*U
+
+
+
+==Code==
+
+What's in this directory is a slightly cleaned-up version of code I
+originally wrote to run once.  It is not a finished product.  It's
+partially in perl and partially in Octave.
+
+
+==Perl code==
+
+The script dailynorms.pl prints a script which, when run, creates all
+of the daily map layers.  It does this in which I used it, using the
+GRASS GIS and our particular directory layout and file naming
+convention.  Yours probably differ, so you will probably need to
+rewrite this to produce a script which works in your context.  
+
+It contains the coefficients of W in the __DATA__ section at the end.
+These coefficients are the ones I used, and come from the smoothing
+matrix S described above.  If you want to use a different smoothing
+matrix, you will need to alter and run the octave code.  You can then
+put its output in the __DATA__ section of the perl code.
+
+
+==Octave code==
+
+The octave code for this task is in dailynorms.m.  It uses the same
+variables as the theory section, plus a few.
+
+The code defines a smoothing matrix S as follows:
+
+S= 0.5*I + 0.25*([zeros(366,1) I(:,1:365)] + [I(:,2:366) zeros(366,1)]);
+S(1,366)=0.25;
+S(366,1)=0.25;
+
+If you don't like this matrix, feel free to substitute your own.  Be
+warned that you actually need to put it in twice -- leap-year and
+non-leap-year versions.  Don't forget the off-diagonal corners.
+
+If you consider this matrix acceptible, you don't need to use the
+octave code at all.
+
+It uses and auxilliary matrix, mmask, to construct U from a length 12
+vector of input parameters:
+
+   U = mmask*u
+
+This gives us
+
+   t = inv(A)*mmask*u
+
+The output from the octave code is actually W = inv(A)*mmask.  This is
+done so that the final multiplication by u can be done in a tool which
+handles raster map layers.
+
+Also, the octave code handles February 29th as follows.  It does the
+entire calculation twice -- once for a leap year and once for a
+non-leap year -- yielding two W matrices.  It then combines them,
+taking a weighted sum for all days except Feb 29.  For Feb 29, it uses
+the row from the leap-year version of W.
+
+The output is an matrix of just coeffients, written to /tmp/W, and a
+matrix with month and day columns added, written to /tmp/Wplus, which
+is what the perl code needs in its __DATA__ section.
+
+(Octave is close enough to Matlab that this will probably run on
+Matlab too.)
