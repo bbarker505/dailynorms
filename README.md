@@ -13,7 +13,7 @@ The code is written in both Perl (`/Perl_version`) and R (`/R_version`). The two
 **Input 1:** 12 raster files that contain monthly averages for a given time frame (e.g., 1961-1990) for a climate variable of interest. 
 The code which defines the names of the output will need to be modified slightly if another source (non-PRISM) data are used.  
 
-**Input 2:** A matrix file that contains the coefficients for the smoothing matrix (input #2), which puts (0.25, 0.5, 0.25) in each row with the 0.5 on the diagonal, wrapped around for the top and bottom rows.   
+**Input 2:** A file with coefficients for the smoothing matrix, which puts (0.25, 0.5, 0.25) in each row with the 0.5 on the diagonal, wrapped around for the top and bottom rows.   
 The first two columns are month (col 1) and day (col 2):    
 - month_numbers = first column of raw matrix  
 - day_numbers = second column of raw matrix
