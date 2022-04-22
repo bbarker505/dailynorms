@@ -26,7 +26,7 @@ The outputs are 366 raster files each containing smoothed average values which a
 ## Required programs and packages
 The Perl version of the code requires the use of GRASS-GIS (see README file in `/Perl_version`).
 
-The R version of the code requires:
+The R version of the code requires:  
 `raster`  
 `dplyr`  
 `stringr`  
